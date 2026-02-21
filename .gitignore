@@ -1,0 +1,17 @@
+# Python
+.venv/
+__pycache__/
+*.pyc
+*.pyo
+*.db
+*.db-journal
+
+# Frontend
+frontend/node_modules/
+frontend/dist/
+
+# Editor
+.DS_Store
+.idea/
+.vscode/
+*.swp
