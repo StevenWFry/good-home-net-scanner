@@ -28,6 +28,30 @@ function PortRow({ port }) {
   )
 }
 
+function ScanTimeline({ records }) {
+  if (!records.length) return null
+  return (
+    <div className="card overflow-hidden">
+      <div className="px-5 py-4 border-b border-gray-800">
+        <h2 className="text-sm font-semibold text-gray-400">Presence History</h2>
+      </div>
+      <ul className="divide-y divide-gray-800">
+        {records.map(r => (
+          <li key={r.id} className="flex items-center gap-3 px-5 py-3">
+            <span className={`w-2 h-2 rounded-full flex-shrink-0 ${r.is_online ? 'bg-emerald-400' : 'bg-gray-600'}`} />
+            <span className={`text-sm font-medium w-14 flex-shrink-0 ${r.is_online ? 'text-emerald-400' : 'text-gray-500'}`}>
+              {r.is_online ? 'Online' : 'Offline'}
+            </span>
+            <span className="text-xs text-gray-600 ml-auto">
+              {r.scanned_at ? new Date(r.scanned_at).toLocaleString() : '—'}
+            </span>
+          </li>
+        ))}
+      </ul>
+    </div>
+  )
+}
+
 function InfoRow({ label, value, mono = false }) {
   if (!value) return null
   return (
@@ -48,6 +72,7 @@ export default function DeviceDetail() {
   const [editingNickname, setEditingNickname] = useState(false)
   const [saving, setSaving] = useState(false)
   const [iconType, setIconType] = useState('device')
+  const [history, setHistory] = useState([])
 
   useEffect(() => {
     api.getDevice(id)
@@ -58,6 +83,7 @@ export default function DeviceDetail() {
       })
       .catch(() => navigate('/'))
       .finally(() => setLoading(false))
+    api.getDeviceHistory(id).then(setHistory).catch(() => {})
   }, [id, navigate])
 
   async function saveNickname() {
@@ -253,6 +279,8 @@ export default function DeviceDetail() {
             <p className="text-sm">No open ports detected</p>
           </div>
         )}
+
+        <ScanTimeline records={history} />
       </main>
     </div>
   )

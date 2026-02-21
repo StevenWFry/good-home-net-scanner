@@ -17,6 +17,7 @@ export const api = {
   getDevice: (id) => request(`/devices/${id}`),
   patchDevice: (id, data) =>
     request(`/devices/${id}`, { method: 'PATCH', body: JSON.stringify(data) }),
+  getDeviceHistory: (id) => request(`/devices/${id}/history`),
   startScan: () => request('/scan', { method: 'POST' }),
   getScanStatus: () => request('/scan/status'),
 }

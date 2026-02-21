@@ -9,7 +9,7 @@ from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
 
 from ..db.database import get_db
-from ..db.models import Device, Port, ScanHistory
+from ..db.models import Device, DeviceScanRecord, Port, ScanHistory
 
 router = APIRouter(prefix="/api/scan", tags=["scan"])
 
@@ -153,6 +153,18 @@ async def run_scan(subnet: str | None = None) -> None:
             # Infer icon type
             device.icon_type = _infer_icon(device.vendor, device.hostname, result.ports)
             db.commit()
+
+        # Write presence record for every known device
+        all_devices = db.query(Device).all()
+        now = datetime.utcnow()
+        for device in all_devices:
+            db.add(DeviceScanRecord(
+                device_id=device.id,
+                scan_id=scan.id,
+                scanned_at=now,
+                is_online=device.is_online,
+            ))
+        db.commit()
 
         devices_found = db.query(Device).filter(Device.is_online == True).count()
         scan.finished_at = datetime.utcnow()

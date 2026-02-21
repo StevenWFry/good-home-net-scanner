@@ -9,7 +9,7 @@ from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from ..db.database import get_db
-from ..db.models import Device, Port
+from ..db.models import Device, DeviceScanRecord, Port
 
 router = APIRouter(prefix="/api/devices", tags=["devices"])
 
@@ -53,7 +53,7 @@ def _device_to_dict(device: Device) -> dict:
             "service": p.service,
             "version": (p.version or "").strip() or None,
             "state": p.state,
-            "last_seen": p.last_seen.isoformat() if p.last_seen else None,
+            "last_seen": p.last_seen.isoformat() + "Z" if p.last_seen else None,
         }
         for p in sorted(device.ports, key=lambda x: x.port)
     ]
@@ -67,8 +67,8 @@ def _device_to_dict(device: Device) -> dict:
         "nickname": device.nickname,
         "icon_type": device.icon_type or "device",
         "tags": tags,
-        "first_seen": device.first_seen.isoformat() if device.first_seen else None,
-        "last_seen": device.last_seen.isoformat() if device.last_seen else None,
+        "first_seen": device.first_seen.isoformat() + "Z" if device.first_seen else None,
+        "last_seen": device.last_seen.isoformat() + "Z" if device.last_seen else None,
         "is_online": device.is_online,
         "ports": ports,
     }
@@ -86,6 +86,30 @@ def get_device(device_id: int, db: Session = Depends(get_db)) -> dict:
     if not device:
         raise HTTPException(status_code=404, detail="Device not found")
     return _device_to_dict(device)
+
+
+def _record_to_dict(r: DeviceScanRecord) -> dict:
+    return {
+        "id": r.id,
+        "scan_id": r.scan_id,
+        "scanned_at": r.scanned_at.isoformat() + "Z" if r.scanned_at else None,
+        "is_online": r.is_online,
+    }
+
+
+@router.get("/{device_id}/history")
+def get_device_history(device_id: int, db: Session = Depends(get_db)) -> list[dict]:
+    device = db.query(Device).filter(Device.id == device_id).first()
+    if not device:
+        raise HTTPException(status_code=404, detail="Device not found")
+    records = (
+        db.query(DeviceScanRecord)
+        .filter(DeviceScanRecord.device_id == device_id)
+        .order_by(DeviceScanRecord.scanned_at.desc())
+        .limit(50)
+        .all()
+    )
+    return [_record_to_dict(r) for r in records]
 
 
 @router.patch("/{device_id}")

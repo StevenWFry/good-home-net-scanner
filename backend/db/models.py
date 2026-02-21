@@ -21,6 +21,11 @@ class Device(Base):
     is_online = Column(Boolean, default=True)
 
     ports = relationship("Port", back_populates="device", cascade="all, delete-orphan")
+    scan_records = relationship(
+        "DeviceScanRecord", back_populates="device",
+        cascade="all, delete-orphan",
+        order_by="DeviceScanRecord.scanned_at.desc()",
+    )
 
 
 class Port(Base):
@@ -47,3 +52,16 @@ class ScanHistory(Base):
     devices_found = Column(Integer, default=0)
     status = Column(String, default="running")  # running, done, error
     error_msg = Column(Text, nullable=True)
+
+
+class DeviceScanRecord(Base):
+    __tablename__ = "device_scan_records"
+
+    id = Column(Integer, primary_key=True, index=True)
+    device_id = Column(Integer, ForeignKey("devices.id"), nullable=False)
+    scan_id = Column(Integer, ForeignKey("scan_history.id"), nullable=False)
+    scanned_at = Column(DateTime, default=datetime.utcnow)
+    is_online = Column(Boolean, nullable=False)
+
+    device = relationship("Device", back_populates="scan_records")
+    scan = relationship("ScanHistory")
