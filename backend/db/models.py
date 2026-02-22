@@ -65,3 +65,11 @@ class DeviceScanRecord(Base):
 
     device = relationship("Device", back_populates="scan_records")
     scan = relationship("ScanHistory")
+
+
+class ScheduleConfig(Base):
+    __tablename__ = "schedule_config"
+
+    id               = Column(Integer, primary_key=True, default=1)
+    enabled          = Column(Boolean, default=False)
+    interval_minutes = Column(Integer, default=60)

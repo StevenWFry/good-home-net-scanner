@@ -20,4 +20,6 @@ export const api = {
   getDeviceHistory: (id) => request(`/devices/${id}/history`),
   startScan: () => request('/scan', { method: 'POST' }),
   getScanStatus: () => request('/scan/status'),
+  getSchedule: () => request('/schedule'),
+  putSchedule: (data) => request('/schedule', { method: 'PUT', body: JSON.stringify(data) }),
 }

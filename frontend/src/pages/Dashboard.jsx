@@ -1,9 +1,128 @@
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import { api } from '../lib/api.js'
 import { useWebSocket } from '../lib/useWebSocket.js'
 import DeviceGrid from '../components/DeviceGrid.jsx'
 import ScanButton from '../components/ScanButton.jsx'
 import ScanProgress from '../components/ScanProgress.jsx'
+
+// ── AutoScanBar ───────────────────────────────────────────────────────────────
+
+function formatNextIn(isoString) {
+  if (!isoString) return null
+  const diff = Math.round((new Date(isoString) - Date.now()) / 1000)
+  if (diff <= 0) return 'now'
+  if (diff < 60) return `${diff}s`
+  const m = Math.floor(diff / 60)
+  const s = diff % 60
+  return s > 0 ? `${m}m ${s}s` : `${m}m`
+}
+
+function AutoScanBar({ scanning }) {
+  const [schedule, setSchedule] = useState(null)
+  const [intervalInput, setIntervalInput] = useState('60')
+  const [, forceRefresh] = useState(0)
+  const timerRef = useRef(null)
+
+  useEffect(() => {
+    api.getSchedule()
+      .then(s => {
+        setSchedule(s)
+        setIntervalInput(String(s.interval_minutes))
+      })
+      .catch(() => {})
+  }, [])
+
+  // Refresh countdown every 30s
+  useEffect(() => {
+    timerRef.current = setInterval(() => forceRefresh(n => n + 1), 30_000)
+    return () => clearInterval(timerRef.current)
+  }, [])
+
+  async function toggleEnabled() {
+    if (!schedule) return
+    const newEnabled = !schedule.enabled
+    // Optimistic update so the toggle responds immediately
+    setSchedule(s => ({ ...s, enabled: newEnabled }))
+    try {
+      const updated = await api.putSchedule({
+        enabled: newEnabled,
+        interval_minutes: schedule.interval_minutes,
+      })
+      setSchedule(updated)
+    } catch (err) {
+      console.error('Failed to update schedule:', err)
+      // Revert on failure
+      setSchedule(s => ({ ...s, enabled: !newEnabled }))
+    }
+  }
+
+  async function saveInterval() {
+    if (!schedule) return
+    const mins = Math.max(1, Math.min(1440, parseInt(intervalInput, 10) || 60))
+    setIntervalInput(String(mins))
+    if (mins === schedule.interval_minutes) return
+    try {
+      const updated = await api.putSchedule({ enabled: schedule.enabled, interval_minutes: mins })
+      setSchedule(updated)
+    } catch (err) {
+      console.error('Failed to update schedule:', err)
+    }
+  }
+
+  if (!schedule) return null
+
+  const nextIn = formatNextIn(schedule.next_run_at)
+
+  return (
+    <div className="flex items-center gap-3 rounded-lg border border-gray-800 bg-gray-900/60 px-4 py-2.5 text-sm">
+      {/* Toggle */}
+      <button
+        type="button"
+        onClick={toggleEnabled}
+        disabled={scanning}
+        aria-label="Toggle auto scan"
+        className={`relative inline-flex h-5 w-9 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 focus:outline-none disabled:opacity-50 ${
+          schedule.enabled ? 'bg-brand-600' : 'bg-gray-700'
+        }`}
+      >
+        <span
+          className={`inline-block h-4 w-4 rounded-full bg-white shadow transition-transform duration-200 ${
+            schedule.enabled ? 'translate-x-4' : 'translate-x-0'
+          }`}
+        />
+      </button>
+
+      <span className="text-gray-400 font-medium">Auto Scan</span>
+
+      <span className="text-gray-600">·</span>
+
+      <span className="text-gray-500">Every</span>
+      <input
+        type="number"
+        min={1}
+        max={1440}
+        value={intervalInput}
+        disabled={scanning}
+        onChange={e => setIntervalInput(e.target.value)}
+        onBlur={saveInterval}
+        onKeyDown={e => e.key === 'Enter' && e.currentTarget.blur()}
+        className="w-16 rounded bg-gray-800 border border-gray-700 px-2 py-0.5 text-center text-gray-200 focus:outline-none focus:border-brand-600 disabled:opacity-50 [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none"
+      />
+      <span className="text-gray-500">min</span>
+
+      {schedule.enabled && nextIn && (
+        <>
+          <span className="text-gray-600">·</span>
+          <span className="text-gray-500">
+            Next in <span className="text-gray-300 font-medium">{nextIn}</span>
+          </span>
+        </>
+      )}
+    </div>
+  )
+}
+
+// ── Dashboard ─────────────────────────────────────────────────────────────────
 
 export default function Dashboard() {
   const [devices, setDevices] = useState([])
@@ -94,6 +213,9 @@ export default function Dashboard() {
         {scanState && scanState.status !== 'idle' && (
           <ScanProgress scanState={scanState} />
         )}
+
+        {/* Auto scan scheduler */}
+        <AutoScanBar scanning={scanning} />
 
         {/* Mobile filter */}
         <div className="sm:hidden">

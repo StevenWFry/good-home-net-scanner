@@ -5,3 +5,4 @@ python-nmap>=0.7.1
 mac-vendor-lookup>=0.1.12
 websockets>=12.0
 aiofiles>=23.2.1
+apscheduler>=3.10.4,<4.0

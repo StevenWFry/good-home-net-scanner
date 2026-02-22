@@ -4,34 +4,21 @@ from __future__ import annotations
 import asyncio
 import json
 import os
+from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Any
 
+from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 
-from .db.database import engine
-from .db.models import Base
+from .db.database import SessionLocal, engine
+from .db.models import Base, ScheduleConfig
 from .api.devices import router as devices_router
 from .api.scans import router as scans_router, set_broadcast
+from .api.schedule import router as schedule_router, set_scheduler, _apply_schedule
 
-# Create tables on startup
-Base.metadata.create_all(bind=engine)
-
-app = FastAPI(title="Good Home Network Scanner", version="1.0.0")
-
-# Allow Vite dev server to call the backend in development
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["http://localhost:5173", "http://127.0.0.1:5173"],
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
-
-app.include_router(devices_router)
-app.include_router(scans_router)
 
 # ── WebSocket ─────────────────────────────────────────────────────────────────
 
@@ -60,7 +47,47 @@ class ConnectionManager:
 
 
 manager = ConnectionManager()
-set_broadcast(manager.broadcast)
+
+
+# ── Lifespan ──────────────────────────────────────────────────────────────────
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # Create DB tables
+    Base.metadata.create_all(bind=engine)
+    # Wire broadcast into scan module
+    set_broadcast(manager.broadcast)
+    # Start scheduler and restore saved config
+    scheduler = AsyncIOScheduler()
+    scheduler.start()
+    set_scheduler(scheduler)
+    db = SessionLocal()
+    try:
+        cfg = db.query(ScheduleConfig).first()
+        if cfg:
+            _apply_schedule(cfg)
+    finally:
+        db.close()
+    yield
+    scheduler.shutdown(wait=False)
+
+
+# ── App ───────────────────────────────────────────────────────────────────────
+
+app = FastAPI(title="Good Home Network Scanner", version="1.0.0", lifespan=lifespan)
+
+# Allow Vite dev server to call the backend in development
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["http://localhost:5173", "http://127.0.0.1:5173"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+app.include_router(devices_router)
+app.include_router(scans_router)
+app.include_router(schedule_router)
 
 
 @app.websocket("/ws")
